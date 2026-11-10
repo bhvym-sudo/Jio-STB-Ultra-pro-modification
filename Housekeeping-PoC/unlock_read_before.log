@@ -1,0 +1,22 @@
+=== JioSTB C200A Bootloader Unlock ===
+Action: read
+
+[*] Skipping reboot (--skip-reboot). Make sure Zygote hasn't been used this boot.
+[*] Injecting CVE-2024-31317 payload...
+Starting: Intent { cmp=com.android.tv.settings/.MainSettings }
+[*] Cleaning up payload (CRITICAL — prevents boot loops)...
+Deleted 1 rows
+[*] Payload cleaned: null
+[*] Waiting for execution...
+
+=== RESULTS ===
+01-01 00:04:21.555  4426  4426 D AndroidRuntime: Calling main entry BootEnv
+01-01 00:04:21.595  4426  4426 D BootEnv : SCM connected
+01-01 00:04:21.597  4426  4426 D BootEnv : ubootenv.var.lock = [10101000]
+01-01 00:04:22.427  4446  4446 D AndroidRuntime: Calling main entry BootEnv
+01-01 00:04:22.466  4446  4446 D BootEnv : SCM connected
+01-01 00:04:22.468  4446  4446 D BootEnv : ubootenv.var.lock_state = []
+01-01 00:04:23.311  4468  4468 D AndroidRuntime: Calling main entry BootEnv
+01-01 00:04:23.349  4468  4468 D BootEnv : SCM connected
+01-01 00:04:23.350  4468  4468 D BootEnv : ubootenv.var.EnableSelinux = [enforcing]
+

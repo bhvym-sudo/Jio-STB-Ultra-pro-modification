@@ -1,0 +1,67 @@
+{\rtf1\ansi\deff0{\fonttbl{\f0 Liberation Sans;}}\paperw11906\paperh16838\margl1361\margr1361\margt1247\margb1247\viewkind4\f0\fs22
+\fs48\b JioSTB Modification Session\b0\fs22\par
+\par\b Session report\b0\par
+\par This report records the device setup, troubleshooting, bootloader investigation, and current limits discussed in the session. The layout is intentionally plain; each topic starts on a new page.\par
+\par\b Device identification\b0\par
+Rear label: JMSB200Av2. Android properties: model JMSB200A; device MSTB; product 4KOTTSTB.\par
+Build fingerprint: Jio/4KOTTSTB/MSTB:11/25.1.9/1:user/release-keys\par
+Security patch: 2024-02-05\tab Kernel: 5.4.125\par
+\par\b Goal\b0\par
+Get persistent ADB access, reduce unwanted launcher/advertising behavior, investigate bootloader unlocking, and determine whether a safe path to Magisk/root exists.\par
+\par\i Statements below distinguish observed command output from user-reported outcomes; this is not independent hardware validation.\i0\page
+\fs36\b Stage 1 - ADB provisioning and Android setup\b0\fs22\par
+\par\b What Stage 1 is\b0\par
+The repository's Stage 1 is a TR-069/GenieACS provisioning workflow. It queues device-management tasks, waits for the STB to Inform the ACS, enables ADB/debug settings, then uses ADB for Android-side setup. It is not a bootloader unlock and does not, by itself, provide root.\par
+\par\b What was done\b0\par
+\bullet\tab Used GenieACS to identify the device as 0CF07B-JMSB200A-RVVSBGLCA698789 and queue refresh / parameter tasks.\par
+\bullet\tab The queued tasks included enabling USB debugging, extending debug validity to 2037, and disabling FOTA / enabling downgrade behavior. They applied on a later Inform.\par
+\bullet\tab ADB connected over the Ethernet link at 192.168.50.3:5555. The first connection was refused or unauthorized; after reboot and accepting the host key, `adb devices` showed the device.\par
+\bullet\tab Stage 1 reported OTA services disabled, staged updates cleared, Developer Options enabled, and the Jio ad service removed if present.\par
+\bullet\tab Installed Monet Launcher and Shevery, granted the requested permission, set Monet as Home, and disabled the stock launcher.\par
+\par The TR-069 client was intentionally preserved because the script warns it may re-assert ADB after reboot.\page
+\fs36\b Networking and ACS chain\b0\fs22\par
+\par\b Direct link\b0\par
+The STB was connected by Ethernet to the PC while the PC retained Wi-Fi internet. NetworkManager configured enp2s0 as 192.168.50.1/24. A dnsmasq DHCP instance served 192.168.50.2-10; the STB obtained 192.168.50.3. This provided local connectivity without depending on the router's DHCP.\par
+\par\b DNS issue and correction\b0\par
+The first Technitium setup created a primary zone for jio.com with only an ACS A record. This made the override work but shadowed the rest of jio.com, returning NXDOMAIN for other Jio names. The zone was changed to conditional forwarding to the home router (192.168.31.1), while retaining the local ACS override.\par
+\par Verified from the PC:\par
+`dig @192.168.50.1 acs.oss.jio.com A +short` returned 192.168.50.1.\par
+`dig @192.168.50.1 www.jio.com A +short` returned a public address (49.40.8.203 at that check).\par
+\par Packet capture on enp2s0 later showed the STB query acs.oss.jio.com, the local DNS answer, and TCP connections from the STB to 192.168.50.1:8443. GenieACS subsequently listed the device and received Informs.\par
+\par A separate `getent`/doctor lookup on the PC resolved ACS publicly. This was a host-side resolver-path mismatch, not evidence that the STB's direct DNS query was also public.\page
+\fs36\b Errors, false starts, and fixes\b0\fs22\par
+\par\bullet\tab Stage 1 initially reported No devices found in GenieACS. Cold power cycles alone did not fix it. Captures showed ordinary DNS queries but initially no ACS TLS traffic. Once the ACS override and forwarding were corrected, the STB contacted port 8443 and appeared in GenieACS.\par
+\bullet\tab The command `dig @192.168.50.1 acs.oss.jio.com +short` returning 192.168.50.1 only verified the PC's DNS response. It did not prove the STB had queried it; tcpdump later supplied that evidence.\par
+\bullet\tab The doctor continued to warn because it checked the PC's normal resolver, which returned a public IP. The more relevant capture on enp2s0 showed the STB's local DNS answer and 8443 traffic.\par
+\bullet\tab A first JHS post-setup invocation used 192.168.1.128, which was not the STB's active address. It printed device-not-found errors alongside success-style text. A later run against 192.168.50.3 completed; package checks confirmed Monet was Home and the OTA packages were absent from normal package listing (the Jio updater packages still appeared with `pm list packages -u`).\par
+\bullet\tab A JHS CLU probe was run while GenieACS was unavailable and returned HTTP 000. That output was not evidence that the probe had been queued or executed. JHS-specific CLU commands target a different workflow and are not equivalent to JMSB Stage 1.\par
+\bullet\tab ADB may be closed or unauthorized after reboot/factory reset; the eventual working flow was to wait for ADB, connect, accept authorization, then verify `adb devices`.\par
+\bullet\tab The primary-zone versus conditional-forwarder distinction caused confusion. Replacing the primary zone with a forwarder preserved other Jio DNS answers while keeping the ACS override.\page
+\fs36\b Stage 2 - bootloader unlock investigation\b0\fs22\par
+\par\b Meaning of Stage 2\b0\par
+Stage 2 is the separate bootloader/BootEnv procedure in Housekeeping-PoC. The PoC uses the Android settings/Zygote pathway associated with CVE-2024-31317 to invoke a privileged BootEnv helper for U-Boot environment access. This is distinct from the TR-069 tasks and Android package setup in Stage 1.\par
+\par\b Device compatibility\b0\par
+The repository's tested-device text listed JMSC200Av2. The user's rear label is JMSB200Av2, so compatibility was initially uncertain. The maintainer replied that unlock works, but cautioned that this model lacks USB-host support in fastbootd, making subsequent bootloader operations “a PITA.” The practical warning concerns the difficult follow-on operations; it does not itself say that unlock failed.\par
+\par\b Read and unlock evidence\b0\par
+The user ran `./unlock.sh read --skip-reboot`. The saved read log showed `lock = 10101000`, empty `lock_state`, and `EnableSelinux = enforcing`. The user also pasted console output showing `BEFORE lock=10101000` and `AFTER lock=10100000`, and later reported that bootloader unlock was confirmed. However, the pasted BEFORE/AFTER lines were not in the saved `unlock_read_before.log`; the read log alone does not prove that write occurred. The reported unlock confirmation is therefore recorded as user-reported, not inferred from that log.\par
+\par The user then ran `pull_boot.sh`, which used the active slot `_a` and extracted `/dev/block/by-name/boot_a` to a 64 MiB `boot.img`.\page
+\fs36\b Root / Magisk status and limitation\b0\fs22\par
+\par The extracted stock boot image is a prerequisite for a possible Magisk workflow, but extraction is not rooting. The user asked whether Magisk must be installed on the STB; the discussed approach was to patch the correct stock image using Magisk on-device because the repository notes a pre-init-directory constraint.\par
+\par\b Not completed in this session\b0\par
+\bullet\tab No Magisk-patched boot image was reported as produced.\par
+\bullet\tab No `fastboot flash` command was reported as run.\par
+\bullet\tab No working PC-to-STB fastbootd transport or recovery route was established.\par
+\bullet\tab The maintainer's USB-host warning means fastbootd may not accept peripherals such as a keyboard or USB drive. It does not automatically settle whether the PC can communicate with the STB over some separate supported USB/device-mode or network transport.\par
+\par A USB-A port on the STB is generally a host port; do not assume a USB-A-to-USB-A cable creates a valid data link between the STB and PC. Verify USB role and fastboot capabilities before attempting any write.\par
+\par\b Bottom line\b0\par
+The session established ADB provisioning and extracted the stock boot image. Bootloader unlock is reported by the user as confirmed. Magisk/root is not established by the available session evidence. A safe, verified flash/recovery path remains the unresolved technical question.\page
+\fs36\b End-of-session state and tomorrow's setup\b0\fs22\par
+\par\b Device and PC state\b0\par
+ADB had been working over Ethernet at 192.168.50.3:5555. Monet and Shevery were installed, and the Stage 1 script reported OTA/update-service changes. Factory reset had previously removed user apps and restored the Jio launcher, requiring Stage 1 to be repeated.\par
+\par The PC's GenieACS, MongoDB, and Technitium DNS Docker containers were stopped at the end of the session. They were stopped, not deleted. The manually launched dnsmasq DHCP process on enp2s0 remained running because sudo required an interactive password in the assistant's terminal. The user was given `sudo kill 131136` to stop that temporary process.\par
+\par\b Suggested resume checklist\b0\par
+\bullet\tab Verify whether dnsmasq is still running; stop the temporary process if desired.\par
+\bullet\tab When testing Stage 1 again, start only the needed GenieACS/MongoDB/DNS services and the TLS front end, then confirm ADB and ACS traffic.\par
+\bullet\tab Preserve the extracted stock `boot.img`. Before any boot-image write, establish the exact transport, supported partition commands, and a realistic recovery route for this model.\par
+\par\i No partition flash or destructive boot-image write is recorded in this session.\i0
+}

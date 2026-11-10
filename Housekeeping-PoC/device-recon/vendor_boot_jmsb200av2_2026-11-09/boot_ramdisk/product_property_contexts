@@ -1,0 +1,5 @@
+#line 1 "vendor/google/apps/googlecast/sepolicy/product/private/property_contexts"
+# used by mediashell
+#ro.odm.cast.ssid_suffix u:object_r:odm_cast_prop:s0
+#line 1 "device/amlogic/common/sepolicy/product/private/property_contexts"
+ro.com.google.gmsversion       u:object_r:atv_prop:s0

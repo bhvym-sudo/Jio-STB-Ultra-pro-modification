@@ -1,0 +1,29 @@
+=== JioSTB C200A Bootloader Unlock ===
+Action: full
+
+[*] Skipping reboot (--skip-reboot). Make sure Zygote hasn't been used this boot.
+[*] Injecting CVE-2024-31317 payload...
+Starting: Intent { cmp=com.android.tv.settings/.MainSettings }
+[*] Cleaning up payload (CRITICAL — prevents boot loops)...
+Deleted 1 rows
+[*] Payload cleaned: null
+[*] Waiting for execution...
+
+=== RESULTS ===
+01-01 00:06:40.503  3479  3479 D AndroidRuntime: Calling main entry BootEnv
+01-01 00:06:40.542  3479  3479 D BootEnv : SCM connected
+01-01 00:06:40.544  3479  3479 D BootEnv : BEFORE: ubootenv.var.lock = [10101000]
+01-01 00:06:40.549  3479  3479 D BootEnv : AFTER:  ubootenv.var.lock = [10100000]
+
+
+=== Next steps ===
+1. Reboot to fastboot:  adb reboot bootloader
+2. Verify unlock:       fastboot getvar unlocked
+3. Reboot:              fastboot reboot
+4. Plug in a USB keyboard — the first boot will require a factory reset.
+
+After factory reset:
+  5. Re-run stage1.sh to re-enable ADB
+  6. Run: ./unlock.sh selinux        (sets SELinux permissive)
+  7. Run: adb reboot                 (SELinux takes effect)
+  8. Run: ./pull_boot.sh             (extract boot.img for Magisk)

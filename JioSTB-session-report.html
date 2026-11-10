@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>JioSTB Session Report</title>
+<style>
+@page { size: A4; margin: 22mm 24mm; }
+body { font: 11pt/1.45 "Liberation Sans", sans-serif; color: #20252b; }
+section { page-break-after: always; }
+section:last-child { page-break-after: auto; }
+h1 { font-size: 25pt; margin: 0 0 8mm; color: #153a5b; }
+h2 { font-size: 17pt; margin: 0 0 7mm; color: #153a5b; }
+p { margin: 0 0 4mm; }
+ul { margin: 2mm 0 0 6mm; padding-left: 5mm; }
+li { margin: 0 0 3mm; }
+.muted { color: #59636e; }
+.callout { border-left: 3px solid #4d86b5; padding: 3mm 4mm; background: #f1f6fa; margin-top: 5mm; }
+</style>
+</head>
+<body>
+<section>
+<h1>JioSTB Modification Session</h1>
+<p><b>Minimal activity report</b></p>
+<p>Device: Jio JMSB200Av2 (label); Android reports JMSB200A / MSTB.</p>
+<p>Build: Jio/4KOTTSTB/MSTB:11/25.1.9/1:user/release-keys<br>Security patch: 2024-02-05 · Kernel: 5.4.125</p>
+<p>Purpose: enable ADB, reduce unwanted launcher/advertising behavior, investigate bootloader unlocking and possible root access.</p>
+<p class="muted">This report records the steps and observations described in the session; it is not independent hardware validation.</p>
+</section>
+
+<section>
+<h2>Stage 1 — ADB and device setup</h2>
+<p>Stage 1 used the TR-069/GenieACS workflow to provision debugging and then ADB commands to configure the Android side.</p>
+<ul>
+<li>Enabled network ADB (TCP port 5555) and set a long debugging-validity value.</li>
+<li>Disabled OTA/update components and cleared staged update files, as reported by the script.</li>
+<li>Preserved the TR-069 client so it could re-assert ADB settings after reboot.</li>
+<li>Installed Monet Launcher and Shevery; set Monet as the home app and disabled the stock launcher.</li>
+<li>After a factory reset, ADB was re-enabled by repeating the provisioning workflow.</li>
+</ul>
+<p class="callout">“Stage 1” here means the repository’s ADB/provisioning setup. It is distinct from bootloader unlocking and does not itself provide root.</p>
+</section>
+
+<section>
+<h2>Networking and ACS setup</h2>
+<p>The STB was connected directly to the PC over Ethernet for an isolated local link. The PC provided DHCP for 192.168.50.0/24; the STB received 192.168.50.3 and the PC used 192.168.50.1.</p>
+<ul>
+<li>Initially, a custom primary DNS zone for <code>jio.com</code> returned the ACS override but caused other Jio names to fail.</li>
+<li>The zone was changed to conditional forwarding to the home router, retaining <code>acs.oss.jio.com → 192.168.50.1</code>.</li>
+<li>Checks then returned the local ACS address for <code>acs.oss.jio.com</code> and a public address for <code>www.jio.com</code>.</li>
+<li>Packet capture confirmed the STB queried the override and connected to the PC on TCP 8443.</li>
+</ul>
+<p class="muted">A separate host DNS lookup later showed a public ACS address; the session diagnosed that as a host resolver path distinct from the STB’s local DNS path.</p>
+</section>
+
+<section>
+<h2>Errors and troubleshooting</h2>
+<ul>
+<li>GenieACS initially found no device because the STB had not yet reached the ACS chain; packet captures later established that DNS and TLS traffic were reaching the PC.</li>
+<li>The doctor check warned that host DNS resolved ACS publicly even while the STB’s direct query received the local override.</li>
+<li>ADB was sometimes closed or initially unauthorised after reboot/factory reset; after the STB accepted the host key, ADB became available.</li>
+<li>A JHS post-setup attempt used a stale IP and printed misleading success-style messages despite “device not found.” A later run against 192.168.50.3 completed; JHS-specific CLU commands were not part of the JMSB Stage 1 workflow.</li>
+<li>Technitium’s zone editor caused confusion between replacing a primary zone and using conditional forwarding.</li>
+</ul>
+</section>
+
+<section>
+<h2>Stage 2 — bootloader and root investigation</h2>
+<p>The bootloader procedure is separate from Stage 1. The repository’s PoC uses the Android settings/Zygote pathway associated with CVE-2024-31317 to call a privileged BootEnv helper and alter/read U-Boot environment values.</p>
+<ul>
+<li>A read run logged the initial <code>lock=10101000</code>, an empty <code>lock_state</code>, and SELinux as enforcing.</li>
+<li>The user reports that bootloader unlocking was later confirmed. The pasted console also showed a lock-value transition, though that transition was not present in the saved read log.</li>
+<li><code>pull_boot.sh</code> successfully extracted the active-slot boot image (<code>boot_a</code>, 64 MiB) to the PC.</li>
+<li>Magisk patching/flashing was not completed in this session. The user had not confirmed a working flash transport or recovery method.</li>
+</ul>
+<p class="callout">Stage 2 refers to unlocking and the subsequent boot-image/root path—not an accomplished Magisk root. The maintainer said unlock works on this model, but warned fastbootd lacks USB-host support, making further bootloader operations difficult.</p>
+</section>
+
+<section>
+<h2>Current state and next investigation</h2>
+<ul>
+<li>ADB over Ethernet had been working at 192.168.50.3:5555; it may need Stage 1 again after factory reset.</li>
+<li>Monet/Shevery and update-service state were configured by Stage 1, but launcher/app persistence after reset was previously an issue.</li>
+<li>A stock boot image was extracted. No Magisk-patched image was flashed; root is therefore not established by the session evidence.</li>
+<li>Fastbootd USB-host limitations are the main unresolved obstacle. USB-A-to-USB-A should not be assumed to work; confirm the device’s USB role/transport before connecting or flashing.</li>
+</ul>
+<p>For tomorrow’s testing, the GenieACS, MongoDB, and Technitium containers were stopped. The temporary <code>dnsmasq</code> DHCP process was not stopped because sudo required an interactive password; the user was given <code>sudo kill 131136</code> to stop it.</p>
+<p class="muted">No partition was flashed as part of the recorded session. Keep the extracted stock image and verify recovery/transport before any write operation.</p>
+</section>
+</body>
+</html>
